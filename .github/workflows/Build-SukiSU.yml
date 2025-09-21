@@ -30,8 +30,8 @@ jobs:
           remove-codeql: 'true'
       - name: Configure Git
         run: |
-         git config --global user.name "44C38B8"
-         git config --global user.email "b2762537725@163.com"
+         git config --global user.name "Qwara_chan"
+         git config --global user.email "LuniiQ@outlook.com"
       - name: Install dependencies
         run: |
           sudo apt update 
@@ -248,7 +248,7 @@ jobs:
           echo "CONFIG_BPF_SYSCALL=y" >> ./common/arch/arm64/configs/gki_defconfig
           echo "CONFIG_BPF_EVENTS=y" >> ./common/arch/arm64/configs/gki_defconfig
           echo "CONFIG_BPF_LSM=y" >> ./common/arch/arm64/configs/gki_defconfig
-          echo "CONFIG_BPF_PRELOAD=y" >> ./common/arch/arm64/configs/gki_defconfig
+          echo "CONFIG_BPF_PRELOAD=n" >> ./common/arch/arm64/configs/gki_defconfig
           #Remove check_defconfig
           sudo sed -i 's/check_defconfig//' ./common/build.config.gki
           cd common
