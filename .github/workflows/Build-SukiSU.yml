@@ -102,11 +102,9 @@ on:
         description: "是否启用添加更多的ZRAM算法？"
         required: true
         default: false
-
 jobs:
   build:
     runs-on: ubuntu-latest
-
     steps:
       - name: Maximize build space
         uses: easimon/maximize-build-space@master
@@ -118,17 +116,14 @@ jobs:
           remove-android: 'true'
           remove-haskell: 'true'
           remove-codeql: 'true'
-
       - name: Configure Git
         run: |
-          git config --global user.name "Numbersf"
-          git config --global user.email "263623064@qq.com"
-
+          git config --global user.name "Qwara_Chan"
+          git config --global user.email "LuniiQ@outlook.com"
       - name: Install dependencies
         run: |
           sudo apt update && sudo apt upgrade -y
-          sudo apt install -y python3 git curl
-
+          sudo apt install -y python3 git curl jq
       - name: Show selected inputs debug
         run: |
           echo "Selected CPU: ${{ github.event.inputs.CPU }}"
@@ -141,13 +136,11 @@ jobs:
           echo "Selected ZRAM: ${{ github.event.inputs.ZRAM }}"
           echo "Selected VFS: ${{ github.event.inputs.VFS }}"
           echo "Selected KPM: ${{ github.event.inputs.KPM }}"
-
       - name: Install repo tool
         run: |
           curl https://storage.googleapis.com/git-repo-downloads/repo > ~/repo
           chmod a+x ~/repo
           sudo mv ~/repo /usr/local/bin/repo
-
       - name: Initialize repo and sync
         run: |
           mkdir kernel_workspace && cd kernel_workspace
@@ -161,7 +154,6 @@ jobs:
           fi
           rm kernel_platform/common/android/abi_gki_protected_exports_* || echo "No protected exports!"
           rm kernel_platform/msm-kernel/android/abi_gki_protected_exports_* || echo "No protected exports!"
-
       # 删除 -dirty 后缀
       - name: Force remove -dirty suffix
         run: |
@@ -172,7 +164,6 @@ jobs:
           sed -i '$i res=$(echo "$res" | sed '\''s/-dirty//g'\'')' common/scripts/setlocalversion
           git add -A
           git commit -m "Force remove -dirty suffix from kernel version"
-
       # 添加 SukiSU Ultra
       - name: Add KernelSU-SukiSU Ultra
         run: |
@@ -183,7 +174,6 @@ jobs:
           echo "KSUVER=$KSU_VERSION" >> $GITHUB_ENV
           export KSU_VERSION=$KSU_VERSION
           sed -i "s/DKSU_VERSION=12800/DKSU_VERSION=${KSU_VERSION}/" kernel/Makefile
-
       - name: Apply Patches SukiSU Ultra
         run: |
           cd kernel_workspace
@@ -194,7 +184,6 @@ jobs:
           cp ../susfs4ksu/kernel_patches/50_add_susfs_in_gki-${{ github.event.inputs.ANDROID_VERSION }}-${{ github.event.inputs.KERNEL_VERSION }}.patch ./common/
           cp ../susfs4ksu/kernel_patches/fs/* ./common/fs/
           cp ../susfs4ksu/kernel_patches/include/linux/* ./common/include/linux/
-
           if [ "${{ github.event.inputs.ZRAM }}" = "true" ]; then
           echo "正在给内核打zram补丁"
           cp -r ../SukiSU_patch/other/zram/lz4k/include/linux/* ./common/include/linux
@@ -202,18 +191,15 @@ jobs:
           cp -r ../SukiSU_patch/other/zram/lz4k/crypto/* ./common/crypto
           cp -r ../SukiSU_patch/other/zram/lz4k_oplus ./common/lib/
           fi
-
           cd ./common
           patch -p1 < 50_add_susfs_in_gki-${{ github.event.inputs.ANDROID_VERSION }}-${{ github.event.inputs.KERNEL_VERSION }}.patch || true
           echo "完成"
-
       - name: Apply Hide Stuff Patches
         run: |
           cd kernel_workspace/kernel_platform/common
           cp ../../SukiSU_patch/69_hide_stuff.patch ./
           echo "正在打隐藏应用补丁"
           patch -p1 -F 3 < 69_hide_stuff.patch
-
       - name: Apply VFS
         run: |
           cd kernel_workspace/kernel_platform/common
@@ -223,7 +209,6 @@ jobs:
           patch -p1 -F 3 < syscall_hooks.patch
           echo "vfs_patch完成"
           fi
-
       - name: Apply LZ4KD
         run: |
           cd kernel_workspace/kernel_platform/common
@@ -233,121 +218,349 @@ jobs:
             patch -p1 -F 3 < lz4kd.patch || true
             echo '完成LZ4KD补丁'
           fi
-
       # 配置信息
       - name: Add Configuration Settings
         run: |
           cd kernel_workspace/kernel_platform
           CONFIG_FILE=./common/arch/arm64/configs/gki_defconfig
           KERNEL_VERSION="${{ github.event.inputs.KERNEL_VERSION }}"
-
           # SukiSU Ultra config
-          echo "CONFIG_KSU=y" >> "$CONFIG_FILE"
-          echo "CONFIG_KPM=y" >> "$CONFIG_FILE"
-          if [ "${{ github.event.inputs.VFS }}" = "false" ]; then
-          echo "CONFIG_KPROBES=y" >> "$CONFIG_FILE"
+          if ! grep -q "CONFIG_KSU=" "$CONFIG_FILE"; then
+            echo "CONFIG_KSU=y" >> "$CONFIG_FILE"
+          fi
+          if ! grep -q "CONFIG_KPM=" "$CONFIG_FILE"; then
+            echo "CONFIG_KPM=y" >> "$CONFIG_FILE"
+          fi
+          if [ "${{ github.event.inputs.VFS }}" = "false" ] && ! grep -q "CONFIG_KPROBES=" "$CONFIG_FILE"; then
+            echo "CONFIG_KPROBES=y" >> "$CONFIG_FILE"
           fi
           # VFS config
           if [ "${{ github.event.inputs.VFS }}" = "true" ]; then
-            echo "CONFIG_KSU_SUSFS_SUS_SU=n" >> "$CONFIG_FILE"
-            echo "CONFIG_KSU_MANUAL_HOOK=y" >> "$CONFIG_FILE"
+            if ! grep -q "CONFIG_KSU_SUSFS_SUS_SU=" "$CONFIG_FILE"; then
+              echo "CONFIG_KSU_SUSFS_SUS_SU=n" >> "$CONFIG_FILE"
+            fi
+            if ! grep -q "CONFIG_KSU_MANUAL_HOOK=" "$CONFIG_FILE"; then
+              echo "CONFIG_KSU_MANUAL_HOOK=y" >> "$CONFIG_FILE"
+            fi
           fi
-
-          if [ "${{ github.event.inputs.VFS }}" = "false" ]; then
+          if [ "${{ github.event.inputs.VFS }}" = "false" ] && ! grep -q "CONFIG_KSU_SUSFS_SUS_SU=" "$CONFIG_FILE"; then
             echo "CONFIG_KSU_SUSFS_SUS_SU=y" >> "$CONFIG_FILE"
           fi
-
           # SUSFS config
           if [ "${{ github.event.inputs.VFS }}" = "true" ]; then
-          echo "CONFIG_KSU_SUSFS=y" >> "$CONFIG_FILE"
-          echo "CONFIG_KSU_SUSFS_HAS_MAGIC_MOUNT=y" >> "$CONFIG_FILE"
-          echo "CONFIG_KSU_SUSFS_SUS_PATH=y" >> "$CONFIG_FILE"
-          echo "CONFIG_KSU_SUSFS_SUS_MOUNT=y" >> "$CONFIG_FILE"
-          echo "CONFIG_KSU_SUSFS_AUTO_ADD_SUS_KSU_DEFAULT_MOUNT=y" >> "$CONFIG_FILE"
-          echo "CONFIG_KSU_SUSFS_AUTO_ADD_SUS_BIND_MOUNT=y" >> "$CONFIG_FILE"
-          echo "CONFIG_KSU_SUSFS_SUS_KSTAT=y" >> "$CONFIG_FILE"
-          echo "CONFIG_KSU_SUSFS_SUS_OVERLAYFS=n" >> "$CONFIG_FILE"
-          echo "CONFIG_KSU_SUSFS_TRY_UMOUNT=y" >> "$CONFIG_FILE"
-          echo "CONFIG_KSU_SUSFS_AUTO_ADD_TRY_UMOUNT_FOR_BIND_MOUNT=y" >> "$CONFIG_FILE"
-          echo "CONFIG_KSU_SUSFS_SPOOF_UNAME=y" >> "$CONFIG_FILE"
-          echo "CONFIG_KSU_SUSFS_ENABLE_LOG=y" >> "$CONFIG_FILE"
-          echo "CONFIG_KSU_SUSFS_HIDE_KSU_SUSFS_SYMBOLS=y" >> "$CONFIG_FILE"
-          echo "CONFIG_KSU_SUSFS_SPOOF_CMDLINE_OR_BOOTCONFIG=y" >> "$CONFIG_FILE"
-          echo "CONFIG_KSU_SUSFS_OPEN_REDIRECT=y" >> "$CONFIG_FILE"
+            if ! grep -q "CONFIG_KSU_SUSFS=" "$CONFIG_FILE"; then
+              echo "CONFIG_KSU_SUSFS=y" >> "$CONFIG_FILE"
+            fi
+            if ! grep -q "CONFIG_KSU_SUSFS_HAS_MAGIC_MOUNT=" "$CONFIG_FILE"; then
+              echo "CONFIG_KSU_SUSFS_HAS_MAGIC_MOUNT=y" >> "$CONFIG_FILE"
+            fi
+            if ! grep -q "CONFIG_KSU_SUSFS_SUS_PATH=" "$CONFIG_FILE"; then
+              echo "CONFIG_KSU_SUSFS_SUS_PATH=y" >> "$CONFIG_FILE"
+            fi
+            if ! grep -q "CONFIG_KSU_SUSFS_SUS_MOUNT=" "$CONFIG_FILE"; then
+              echo "CONFIG_KSU_SUSFS_SUS_MOUNT=y" >> "$CONFIG_FILE"
+            fi
+            if ! grep -q "CONFIG_KSU_SUSFS_AUTO_ADD_SUS_KSU_DEFAULT_MOUNT=" "$CONFIG_FILE"; then
+              echo "CONFIG_KSU_SUSFS_AUTO_ADD_SUS_KSU_DEFAULT_MOUNT=y" >> "$CONFIG_FILE"
+            fi
+            if ! grep -q "CONFIG_KSU_SUSFS_AUTO_ADD_SUS_BIND_MOUNT=" "$CONFIG_FILE"; then
+              echo "CONFIG_KSU_SUSFS_AUTO_ADD_SUS_BIND_MOUNT=y" >> "$CONFIG_FILE"
+            fi
+            if ! grep -q "CONFIG_KSU_SUSFS_SUS_KSTAT=" "$CONFIG_FILE"; then
+              echo "CONFIG_KSU_SUSFS_SUS_KSTAT=y" >> "$CONFIG_FILE"
+            fi
+            if ! grep -q "CONFIG_KSU_SUSFS_SUS_OVERLAYFS=" "$CONFIG_FILE"; then
+              echo "CONFIG_KSU_SUSFS_SUS_OVERLAYFS=n" >> "$CONFIG_FILE"
+            fi
+            if ! grep -q "CONFIG_KSU_SUSFS_TRY_UMOUNT=" "$CONFIG_FILE"; then
+              echo "CONFIG_KSU_SUSFS_TRY_UMOUNT=y" >> "$CONFIG_FILE"
+            fi
+            if ! grep -q "CONFIG_KSU_SUSFS_AUTO_ADD_TRY_UMOUNT_FOR_BIND_MOUNT=" "$CONFIG_FILE"; then
+              echo "CONFIG_KSU_SUSFS_AUTO_ADD_TRY_UMOUNT_FOR_BIND_MOUNT=y" >> "$CONFIG_FILE"
+            fi
+            if ! grep -q "CONFIG_KSU_SUSFS_SPOOF_UNAME=" "$CONFIG_FILE"; then
+              echo "CONFIG_KSU_SUSFS_SPOOF_UNAME=y" >> "$CONFIG_FILE"
+            fi
+            if ! grep -q "CONFIG_KSU_SUSFS_ENABLE_LOG=" "$CONFIG_FILE"; then
+              echo "CONFIG_KSU_SUSFS_ENABLE_LOG=y" >> "$CONFIG_FILE"
+            fi
+            if ! grep -q "CONFIG_KSU_SUSFS_HIDE_KSU_SUSFS_SYMBOLS=" "$CONFIG_FILE"; then
+              echo "CONFIG_KSU_SUSFS_HIDE_KSU_SUSFS_SYMBOLS=y" >> "$CONFIG_FILE"
+            fi
+            if ! grep -q "CONFIG_KSU_SUSFS_SPOOF_CMDLINE_OR_BOOTCONFIG=" "$CONFIG_FILE"; then
+              echo "CONFIG_KSU_SUSFS_SPOOF_CMDLINE_OR_BOOTCONFIG=y" >> "$CONFIG_FILE"
+            fi
+            if ! grep -q "CONFIG_KSU_SUSFS_OPEN_REDIRECT=" "$CONFIG_FILE"; then
+              echo "CONFIG_KSU_SUSFS_OPEN_REDIRECT=y" >> "$CONFIG_FILE"
+            fi
           fi
-
           # Remove check_defconfig
           sed -i 's/check_defconfig//' ./common/build.config.gki
-
           # LZ4KD配置
           if [ "${{ github.event.inputs.ZRAM }}" = "true" ]; then
           CONFIG_FILE=./common/arch/arm64/configs/gki_defconfig
-
             if [ "${{ github.event.inputs.KERNEL_VERSION }}" = "5.10" ]; then
-              echo "CONFIG_ZSMALLOC=y" >> "$CONFIG_FILE"
-              echo "CONFIG_ZRAM=y" >> "$CONFIG_FILE"
-              echo "CONFIG_MODULE_SIG=n" >> "$CONFIG_FILE"
-              echo "CONFIG_CRYPTO_LZO=y" >> "$CONFIG_FILE"
-              echo "CONFIG_ZRAM_DEF_COMP_LZ4KD=y" >> "$CONFIG_FILE"
+              if ! grep -q "CONFIG_ZSMALLOC=" "$CONFIG_FILE"; then
+                echo "CONFIG_ZSMALLOC=y" >> "$CONFIG_FILE"
+              fi
+              if ! grep -q "CONFIG_ZRAM=" "$CONFIG_FILE"; then
+                echo "CONFIG_ZRAM=y" >> "$CONFIG_FILE"
+              fi
+              if ! grep -q "CONFIG_MODULE_SIG=" "$CONFIG_FILE"; then
+                echo "CONFIG_MODULE_SIG=n" >> "$CONFIG_FILE"
+              fi
+              if ! grep -q "CONFIG_CRYPTO_LZO=" "$CONFIG_FILE"; then
+                echo "CONFIG_CRYPTO_LZO=y" >> "$CONFIG_FILE"
+              fi
+              if ! grep -q "CONFIG_ZRAM_DEF_COMP_LZ4KD=" "$CONFIG_FILE"; then
+                echo "CONFIG_ZRAM_DEF_COMP_LZ4KD=y" >> "$CONFIG_FILE"
+              fi
             fi
-
             if [ "${{ github.event.inputs.KERNEL_VERSION }}" != "6.6" ] && [ "${{ github.event.inputs.KERNEL_VERSION }}" != "5.10" ]; then
               if grep -q "CONFIG_ZSMALLOC" -- "$CONFIG_FILE"; then
                 sed -i 's/CONFIG_ZSMALLOC=m/CONFIG_ZSMALLOC=y/g' "$CONFIG_FILE"
-              else
+              elif ! grep -q "CONFIG_ZSMALLOC=" "$CONFIG_FILE"; then
                 echo "CONFIG_ZSMALLOC=y" >> "$CONFIG_FILE"
               fi
-              sed -i 's/CONFIG_ZRAM=m/CONFIG_ZRAM=y/g' "$CONFIG_FILE"
+              if grep -q "CONFIG_ZRAM=m" -- "$CONFIG_FILE"; then
+                sed -i 's/CONFIG_ZRAM=m/CONFIG_ZRAM=y/g' "$CONFIG_FILE"
+              elif ! grep -q "CONFIG_ZRAM=" "$CONFIG_FILE"; then
+                echo "CONFIG_ZRAM=y" >> "$CONFIG_FILE"
+              fi
             fi
-
             if [ "${{ github.event.inputs.KERNEL_VERSION }}" = "6.6" ]; then
-              echo "CONFIG_ZSMALLOC=y" >> "$CONFIG_FILE"
-              sed -i 's/CONFIG_ZRAM=m/CONFIG_ZRAM=y/g' "$CONFIG_FILE"
+              if ! grep -q "CONFIG_ZSMALLOC=" "$CONFIG_FILE"; then
+                echo "CONFIG_ZSMALLOC=y" >> "$CONFIG_FILE"
+              fi
+              if grep -q "CONFIG_ZRAM=m" -- "$CONFIG_FILE"; then
+                sed -i 's/CONFIG_ZRAM=m/CONFIG_ZRAM=y/g' "$CONFIG_FILE"
+              elif ! grep -q "CONFIG_ZRAM=" "$CONFIG_FILE"; then
+                echo "CONFIG_ZRAM=y" >> "$CONFIG_FILE"
+              fi
             fi
-
             if [ "${{ github.event.inputs.ANDROID_VERSION }}" = "android14" ] || [ "${{ github.event.inputs.ANDROID_VERSION }}" = "android15" ]; then
               if [  -e ./common/modules.bzl ]; then
                 sed -i 's/"drivers\/block\/zram\/zram\.ko",//g; s/"mm\/zsmalloc\.ko",//g' "./common/modules.bzl"
               fi
-
               if [  -e ./msm-kernel/modules.bzl ]; then
                 sed -i 's/"drivers\/block\/zram\/zram\.ko",//g; s/"mm\/zsmalloc\.ko",//g' "./msm-kernel/modules.bzl"
-                echo "CONFIG_ZSMALLOC=y" >> "msm-kernel/arch/arm64/configs/${{ github.event.inputs.CPUD }}-GKI.config"
-                echo "CONFIG_ZRAM=y" >> "msm-kernel/arch/arm64/configs/${{ github.event.inputs.CPUD }}-GKI.config"
+                if ! grep -q "CONFIG_ZSMALLOC=" "msm-kernel/arch/arm64/configs/${{ github.event.inputs.CPUD }}-GKI.config"; then
+                  echo "CONFIG_ZSMALLOC=y" >> "msm-kernel/arch/arm64/configs/${{ github.event.inputs.CPUD }}-GKI.config"
+                fi
+                if ! grep -q "CONFIG_ZRAM=" "msm-kernel/arch/arm64/configs/${{ github.event.inputs.CPUD }}-GKI.config"; then
+                  echo "CONFIG_ZRAM=y" >> "msm-kernel/arch/arm64/configs/${{ github.event.inputs.CPUD }}-GKI.config"
+                fi
               fi
-              
-              echo "CONFIG_MODULE_SIG_FORCE=n" >> "$CONFIG_FILE"
+              if ! grep -q "CONFIG_MODULE_SIG_FORCE=" "$CONFIG_FILE"; then
+                echo "CONFIG_MODULE_SIG_FORCE=n" >> "$CONFIG_FILE"
+              fi
             elif [ "${{ github.event.inputs.KERNEL_VERSION }}" = "5.10" ] || [ "${{ github.event.inputs.KERNEL_VERSION }}" = "5.15" ]; then
-              rm "common/android/gki_aarch64_modules"
+              rm -f "common/android/gki_aarch64_modules"
               touch "common/android/gki_aarch64_modules"
             fi
-
             if grep -q "CONFIG_ZSMALLOC=y" "$CONFIG_FILE" && grep -q "CONFIG_ZRAM=y" "$CONFIG_FILE"; then
-              echo "CONFIG_CRYPTO_LZ4HC=y" >> "$CONFIG_FILE"
-              echo "CONFIG_CRYPTO_LZ4K=y" >> "$CONFIG_FILE"
-              echo "CONFIG_CRYPTO_LZ4KD=y" >> "$CONFIG_FILE"
-              echo "CONFIG_CRYPTO_842=y" >> "$CONFIG_FILE"
-              echo "CONFIG_ZRAM_WRITEBACK=y" >> "$CONFIG_FILE"
+              if ! grep -q "CONFIG_CRYPTO_LZ4HC=" "$CONFIG_FILE"; then
+                echo "CONFIG_CRYPTO_LZ4HC=y" >> "$CONFIG_FILE"
+              fi
+              if ! grep -q "CONFIG_CRYPTO_LZ4K=" "$CONFIG_FILE"; then
+                echo "CONFIG_CRYPTO_LZ4K=y" >> "$CONFIG_FILE"
+              fi
+              if ! grep -q "CONFIG_CRYPTO_LZ4KD=" "$CONFIG_FILE"; then
+                echo "CONFIG_CRYPTO_LZ4KD=y" >> "$CONFIG_FILE"
+              fi
+              if ! grep -q "CONFIG_CRYPTO_842=" "$CONFIG_FILE"; then
+                echo "CONFIG_CRYPTO_842=y" >> "$CONFIG_FILE"
+              fi
+              if ! grep -q "CONFIG_ZRAM_WRITEBACK=" "$CONFIG_FILE"; then
+                echo "CONFIG_ZRAM_WRITEBACK=y" >> "$CONFIG_FILE"
+              fi
             fi
           fi
-
+          
+          # NetHunter and Docker support - 添加前先检查是否已存在
+          if ! grep -q "CONFIG_NET=" "$CONFIG_FILE"; then
+            echo "CONFIG_NET=y" >> "$CONFIG_FILE"
+          fi
+          if ! grep -q "CONFIG_NETFILTER=" "$CONFIG_FILE"; then
+            echo "CONFIG_NETFILTER=y" >> "$CONFIG_FILE"
+          fi
+          if ! grep -q "CONFIG_NETFILTER_ADVANCED=" "$CONFIG_FILE"; then
+            echo "CONFIG_NETFILTER_ADVANCED=y" >> "$CONFIG_FILE"
+          fi
+          
+          # 命名空间支持 (Docker和容器必需)
+          if ! grep -q "CONFIG_NAMESPACES=" "$CONFIG_FILE"; then
+            echo "CONFIG_NAMESPACES=y" >> "$CONFIG_FILE"
+          fi
+          if ! grep -q "CONFIG_UTS_NS=" "$CONFIG_FILE"; then
+            echo "CONFIG_UTS_NS=y" >> "$CONFIG_FILE"
+          fi
+          if ! grep -q "CONFIG_IPC_NS=" "$CONFIG_FILE"; then
+            echo "CONFIG_IPC_NS=y" >> "$CONFIG_FILE"
+          fi
+          if ! grep -q "CONFIG_USER_NS=" "$CONFIG_FILE"; then
+            echo "CONFIG_USER_NS=y" >> "$CONFIG_FILE"
+          fi
+          if ! grep -q "CONFIG_PID_NS=" "$CONFIG_FILE"; then
+            echo "CONFIG_PID_NS=y" >> "$CONFIG_FILE"
+          fi
+          if ! grep -q "CONFIG_NET_NS=" "$CONFIG_FILE"; then
+            echo "CONFIG_NET_NS=y" >> "$CONFIG_FILE"
+          fi
+          if ! grep -q "CONFIG_CGROUPS=" "$CONFIG_FILE"; then
+            echo "CONFIG_CGROUPS=y" >> "$CONFIG_FILE"
+          fi
+          if ! grep -q "CONFIG_CGROUP_CPUACCT=" "$CONFIG_FILE"; then
+            echo "CONFIG_CGROUP_CPUACCT=y" >> "$CONFIG_FILE"
+          fi
+          if ! grep -q "CONFIG_CGROUP_DEVICE=" "$CONFIG_FILE"; then
+            echo "CONFIG_CGROUP_DEVICE=y" >> "$CONFIG_FILE"
+          fi
+          if ! grep -q "CONFIG_CGROUP_FREEZER=" "$CONFIG_FILE"; then
+            echo "CONFIG_CGROUP_FREEZER=y" >> "$CONFIG_FILE"
+          fi
+          if ! grep -q "CONFIG_CGROUP_PIDS=" "$CONFIG_FILE"; then
+            echo "CONFIG_CGROUP_PIDS=y" >> "$CONFIG_FILE"
+          fi
+          if ! grep -q "CONFIG_CGROUP_HUGETLB=" "$CONFIG_FILE"; then
+            echo "CONFIG_CGROUP_HUGETLB=y" >> "$CONFIG_FILE"
+          fi
+          if ! grep -q "CONFIG_CGROUP_PERF=" "$CONFIG_FILE"; then
+            echo "CONFIG_CGROUP_PERF=y" >> "$CONFIG_FILE"
+          fi
+          if ! grep -q "CONFIG_CGROUP_SCHED=" "$CONFIG_FILE"; then
+            echo "CONFIG_CGROUP_SCHED=y" >> "$CONFIG_FILE"
+          fi
+          if ! grep -q "CONFIG_BLK_CGROUP=" "$CONFIG_FILE"; then
+            echo "CONFIG_BLK_CGROUP=y" >> "$CONFIG_FILE"
+          fi
+          
+          # 安全相关
+          if ! grep -q "CONFIG_SECCOMP=" "$CONFIG_FILE"; then
+            echo "CONFIG_SECCOMP=y" >> "$CONFIG_FILE"
+          fi
+          if ! grep -q "CONFIG_SECCOMP_FILTER=" "$CONFIG_FILE"; then
+            echo "CONFIG_SECCOMP_FILTER=y" >> "$CONFIG_FILE"
+          fi
+          
+          # 文件系统支持
+          if ! grep -q "CONFIG_OVERLAY_FS=" "$CONFIG_FILE"; then
+            echo "CONFIG_OVERLAY_FS=y" >> "$CONFIG_FILE"
+          fi
+          if ! grep -q "CONFIG_AUFS_FS=" "$CONFIG_FILE"; then
+            echo "CONFIG_AUFS_FS=y" >> "$CONFIG_FILE"
+          fi
+          if ! grep -q "CONFIG_EXT4_FS_POSIX_ACL=" "$CONFIG_FILE"; then
+            echo "CONFIG_EXT4_FS_POSIX_ACL=y" >> "$CONFIG_FILE"
+          fi
+          if ! grep -q "CONFIG_TMPFS_POSIX_ACL=" "$CONFIG_FILE"; then
+            echo "CONFIG_TMPFS_POSIX_ACL=y" >> "$CONFIG_FILE"
+          fi
+          
+          # 网络功能
+          if ! grep -q "CONFIG_VETH=" "$CONFIG_FILE"; then
+            echo "CONFIG_VETH=y" >> "$CONFIG_FILE"
+          fi
+          if ! grep -q "CONFIG_BRIDGE=" "$CONFIG_FILE"; then
+            echo "CONFIG_BRIDGE=y" >> "$CONFIG_FILE"
+          fi
+          if ! grep -q "CONFIG_BRIDGE_NETFILTER=" "$CONFIG_FILE"; then
+            echo "CONFIG_BRIDGE_NETFILTER=y" >> "$CONFIG_FILE"
+          fi
+          if ! grep -q "CONFIG_NETFILTER_XT_TARGET_REDIRECT=" "$CONFIG_FILE"; then
+            echo "CONFIG_NETFILTER_XT_TARGET_REDIRECT=y" >> "$CONFIG_FILE"
+          fi
+          if ! grep -q "CONFIG_NETFILTER_XT_TARGET_MASQUERADE=" "$CONFIG_FILE"; then
+            echo "CONFIG_NETFILTER_XT_TARGET_MASQUERADE=y" >> "$CONFIG_FILE"
+          fi
+          if ! grep -q "CONFIG_NETFILTER_XT_MATCH_COMMENT=" "$CONFIG_FILE"; then
+            echo "CONFIG_NETFILTER_XT_MATCH_COMMENT=y" >> "$CONFIG_FILE"
+          fi
+          if ! grep -q "CONFIG_NETFILTER_XT_MATCH_OWNER=" "$CONFIG_FILE"; then
+            echo "CONFIG_NETFILTER_XT_MATCH_OWNER=y" >> "$CONFIG_FILE"
+          fi
+          if ! grep -q "CONFIG_NETFILTER_XT_MATCH_STRING=" "$CONFIG_FILE"; then
+            echo "CONFIG_NETFILTER_XT_MATCH_STRING=y" >> "$CONFIG_FILE"
+          fi
+          if ! grep -q "CONFIG_NETFILTER_XT_MATCH_ADDRTYPE=" "$CONFIG_FILE"; then
+            echo "CONFIG_NETFILTER_XT_MATCH_ADDRTYPE=y" >> "$CONFIG_FILE"
+          fi
+          if ! grep -q "CONFIG_IP_NF_FILTER=" "$CONFIG_FILE"; then
+            echo "CONFIG_IP_NF_FILTER=y" >> "$CONFIG_FILE"
+          fi
+          if ! grep -q "CONFIG_IP_NF_NAT=" "$CONFIG_FILE"; then
+            echo "CONFIG_IP_NF_NAT=y" >> "$CONFIG_FILE"
+          fi
+          if ! grep -q "CONFIG_IP_NF_TARGET_MASQUERADE=" "$CONFIG_FILE"; then
+            echo "CONFIG_IP_NF_TARGET_MASQUERADE=y" >> "$CONFIG_FILE"
+          fi
+          if ! grep -q "CONFIG_IP6_NF_FILTER=" "$CONFIG_FILE"; then
+            echo "CONFIG_IP6_NF_FILTER=y" >> "$CONFIG_FILE"
+          fi
+          if ! grep -q "CONFIG_IP6_NF_NAT=" "$CONFIG_FILE"; then
+            echo "CONFIG_IP6_NF_NAT=y" >> "$CONFIG_FILE"
+          fi
+          if ! grep -q "CONFIG_IP6_NF_TARGET_MASQUERADE=" "$CONFIG_FILE"; then
+            echo "CONFIG_IP6_NF_TARGET_MASQUERADE=y" >> "$CONFIG_FILE"
+          fi
+          
+          # IPv6支持 (推荐)
+          if ! grep -q "CONFIG_IPV6=" "$CONFIG_FILE"; then
+            echo "CONFIG_IPV6=y" >> "$CONFIG_FILE"
+          fi
+          if ! grep -q "CONFIG_IPV6_MULTIPLE_TABLES=" "$CONFIG_FILE"; then
+            echo "CONFIG_IPV6_MULTIPLE_TABLES=y" >> "$CONFIG_FILE"
+          fi
+          if ! grep -q "CONFIG_IPV6_SUBTREES=" "$CONFIG_FILE"; then
+            echo "CONFIG_IPV6_SUBTREES=y" >> "$CONFIG_FILE"
+          fi
+          
+          # 其他重要选项
+          if ! grep -q "CONFIG_CHECKPOINT_RESTORE=" "$CONFIG_FILE"; then
+            echo "CONFIG_CHECKPOINT_RESTORE=y" >> "$CONFIG_FILE"
+          fi
+          # 修正vsyscall配置 - 只设置一个
+          if ! grep -q "CONFIG_LEGACY_VSYSCALL_EMULATE=" "$CONFIG_FILE"; then
+            echo "CONFIG_LEGACY_VSYSCALL_EMULATE=y" >> "$CONFIG_FILE"
+          fi
+          if grep -q "CONFIG_LEGACY_VSYSCALL_XONLY=" "$CONFIG_FILE"; then
+            sed -i '/CONFIG_LEGACY_VSYSCALL_XONLY=/d' "$CONFIG_FILE"
+          fi
+          if grep -q "CONFIG_LEGACY_VSYSCALL_NONE=" "$CONFIG_FILE"; then
+            sed -i '/CONFIG_LEGACY_VSYSCALL_NONE=/d' "$CONFIG_FILE"
+          fi
+      - name: Add O3 Optimization
+        run: |
+          cd kernel_workspace/kernel_platform
+          # 修改build.config.gki添加O3优化
+          if ! grep -q "KCFLAGS += -O3" common/build.config.gki; then
+            echo "KCFLAGS += -O3" >> common/build.config.gki
+          fi
+          if ! grep -q "KBUILD_CFLAGS += -O3" common/build.config.gki; then
+            echo "KBUILD_CFLAGS += -O3" >> common/build.config.gki
+          fi
+          if ! grep -q "KBUILD_CFLAGS_KERNEL += -O3" common/build.config.gki; then
+            echo "KBUILD_CFLAGS_KERNEL += -O3" >> common/build.config.gki
+          fi
+          
+          # 添加必要的安全优化选项
+          if ! grep -q "KBUILD_CFLAGS += -fno-omit-frame-pointer" common/build.config.gki; then
+            echo "KBUILD_CFLAGS += -fno-omit-frame-pointer" >> common/build.config.gki
+          fi
       - name: Build kernel
         if: ${{ github.event.inputs.CPU == 'sm8650' || github.event.inputs.CPU == 'sm7675' }}
         run: |
           cd kernel_workspace
-          ./kernel_platform/build_with_bazel.py -t ${{ github.event.inputs.CPUD }} ${{ github.event.inputs.BUILD_METHOD }}
-          
+          KCFLAGS="-O3" KBUILD_CFLAGS="-O3" ./kernel_platform/build_with_bazel.py -t ${{ github.event.inputs.CPUD }} ${{ github.event.inputs.BUILD_METHOD }}
       - name: Fallback build kernel
         if: ${{ github.event.inputs.CPU != 'sm8650' && github.event.inputs.CPU != 'sm7675' }}
         run: |
          cd kernel_workspace
-         LTO=thin SYSTEM_DLKM_RE_SIGN=0 BUILD_SYSTEM_DLKM=0 KMI_SYMBOL_LIST_STRICT_MODE=0 ./kernel_platform/oplus/build/oplus_build_kernel.sh ${{ github.event.inputs.CPUD }} ${{ github.event.inputs.BUILD_METHOD }}
-
+         KCFLAGS="-O3" KBUILD_CFLAGS="-O3" LTO=thin SYSTEM_DLKM_RE_SIGN=0 BUILD_SYSTEM_DLKM=0 KMI_SYMBOL_LIST_STRICT_MODE=0 ./kernel_platform/oplus/build/oplus_build_kernel.sh ${{ github.event.inputs.CPUD }} ${{ github.event.inputs.BUILD_METHOD }}
       - name: Make AnyKernel3
         run: |
           git clone https://github.com/Numbersf/AnyKernel3 --depth=1
           rm -rf ./AnyKernel3/.git
-
           dir1="kernel_workspace/kernel_platform/out/msm-kernel-${{ github.event.inputs.CPUD }}-${{ github.event.inputs.BUILD_METHOD }}/dist/"
           dir2="kernel_workspace/kernel_platform/bazel-out/k8-fastbuild/bin/msm-kernel/${{ github.event.inputs.CPUD }}_gki_kbuild_mixed_tree/"
           dir3="kernel_workspace/kernel_platform/out/msm-${{ github.event.inputs.CPUD }}-${{ github.event.inputs.CPUD }}-${{ github.event.inputs.BUILD_METHOD }}/dist/"
@@ -355,7 +568,6 @@ jobs:
           dir5="kernel_workspace/kernel_platform/out/msm-${{ github.event.inputs.CPUD }}-${{ github.event.inputs.CPUD }}-${{ github.event.inputs.BUILD_METHOD }}/gki_kernel/common/arch/arm64/boot/"
           target1="./AnyKernel3/"
           target2="./kernel_workspace/kernel"
-
           # 查找 Image 文件
           if find "$dir1" -name "Image" | grep -q "Image"; then
             image_path="$dir1"Image
@@ -370,7 +582,6 @@ jobs:
           else
             image_path=$(find "./kernel_workspace/kernel_platform/common/out/" -name "Image" | head -n 1)
           fi
-
           # 拷贝 Image
           if [ -n "$image_path" ] && [ -f "$image_path" ]; then
             mkdir -p "$dir1"
@@ -384,7 +595,6 @@ jobs:
             echo "未找到 Image 文件，构建可能失败"
             exit 1
           fi
-
           # 可选复制其它新文件（如果存在）
           if [ "${{ github.event.inputs.CPU }}" = "sm8750" ]; then
           for file in dtbo.img system_dlkm.erofs.img vendor_dlkm.img vendor_boot.img; do
@@ -400,19 +610,16 @@ jobs:
             fi
           done
           fi
-
       - name: Apply patch_linux and replace Image
         if: ${{ github.event.inputs.KPM == 'true' }}
         run: |
           cd /home/runner/work/Action_OnePlus_MKSU_SUSFS/Action_OnePlus_MKSU_SUSFS/kernel_workspace/kernel_platform/out/msm-kernel-${{ github.event.inputs.CPUD }}-${{ github.event.inputs.BUILD_METHOD }}/dist
-
           curl -LSs "https://raw.githubusercontent.com/ShirkNeko/SukiSU_patch/refs/heads/main/kpm/patch_linux" -o patch_linux
           chmod +x patch_linux
           ./patch_linux
           rm -f Image
           mv oImage Image
           cp Image $GITHUB_WORKSPACE/AnyKernel3/Image
-
       # 下载 SUSFS 模块（CI）
       - name: Download Latest SUSFS Module from CI
         if: ${{ github.event.inputs.SUSFS_CI == 'true' }}
@@ -420,30 +627,24 @@ jobs:
           LATEST_RUN_ID=$(curl -s -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
             "https://api.github.com/repos/sidex15/susfs4ksu-module/actions/runs?status=success" | \
             jq -r '.workflow_runs[] | select(.head_branch == "v1.5.2+") | .id' | head -n 1)
-
           if [ -z "$LATEST_RUN_ID" ]; then
             echo "No successful run found for branch v1.5.2+"
             exit 1
           fi
-
           ARTIFACT_URL=$(curl -s -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
             "https://api.github.com/repos/sidex15/susfs4ksu-module/actions/runs/$LATEST_RUN_ID/artifacts" | jq -r '.artifacts[0].archive_download_url')
-
           curl -L -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" -o ksu_module_susfs.zip "$ARTIFACT_URL"
           cp ksu_module_susfs.zip ./AnyKernel3/
-
       # 下载 SUSFS 模块（Release）
       - name: Download Latest SUSFS Module from Release
         if: ${{ github.event.inputs.SUSFS_CI == 'false' }}
         run: |
           wget https://github.com/sidex15/ksu_module_susfs/releases/latest/download/ksu_module_susfs_1.5.2+.zip
           cp ksu_module_susfs_1.5.2+.zip ./AnyKernel3/
-
       - name: Set suffix
         id: suffix
         run: |
           echo "value=${{ github.event.inputs.KPM == 'true' && '_KPM' || '' }}${{ github.event.inputs.VFS == 'true' && '_VFS' || '' }}${{ github.event.inputs.ZRAM == 'true' && '_LZ4KD' || '' }}" >> $GITHUB_OUTPUT
-
       - name: Remove _uv suffix from FEIL
         id: feil_clean
         run: |
@@ -451,7 +652,6 @@ jobs:
           clean_feil="${clean_feil%_v}"  # 去掉结尾的 _v（如果有）
           clean_feil="${clean_feil%_u}"  # 去掉结尾的 _u（如果有）
           echo "value=$clean_feil" >> $GITHUB_OUTPUT
-
       - name: Upload AnyKernel3
         uses: actions/upload-artifact@v4
         with:
